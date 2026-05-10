@@ -4,7 +4,15 @@ This modpack aims to create a definitive Majora's Mask experience that enhances 
 
 Suggestions for additions/removals are greatly appreciated: quackyoutube@gmail.com
 
-### Mod List:
+### Instructions
+1. Click Manual Download
+2. Extract the .zip contents into their own folder
+3. Open a terminal window in that folder & run `python download_mods.py`
+4. Wait - this will take a little while
+5. Open the "mods" folder, select all .zip files, and drag them into an open Majora's Mask Recompilation window
+6. Wait a few seconds for them to install, and then play the game!
+
+### Mod List
 * 3D Bomb Equipment
 * 3DItems
 * 3DS Gibdo Trade
