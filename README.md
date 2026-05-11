@@ -1,8 +1,8 @@
 # Majora's Mask: Definitive Edition
 
-This modpack aims to create a definitive Majora's Mask experience that enhances and modernizes the game without significantly eroding vanilla gameplay. Right now, it is new and imperfect.
+This modpack aims to create a definitive Majora's Mask experience that enhances and modernizes the game without significantly eroding vanilla gameplay.
 
-Suggestions for additions/removals are greatly appreciated: quackyoutube@gmail.com
+Suggestions are greatly appreciated: quackyoutube@gmail.com
 
 ### Instructions
 1. Click Manual Download
