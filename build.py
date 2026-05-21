@@ -1,7 +1,14 @@
 import zipfile
 import os
 
-files_to_zip = ['README.md', 'manifest.json', 'icon.png', 'download_mods.py']
+# Added the new script to the distribution list
+files_to_zip = [
+    'README.md', 
+    'manifest.json', 
+    'icon.png', 
+    'download_mods.py', 
+    'download_mods_exclude_textures.py'
+]
 zip_filename = 'MMDE.zip'
 
 def create_thunderstore_zip():
