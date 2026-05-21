@@ -1,14 +1,18 @@
 # Majora's Mask: Definitive Edition
 
-This modpack aims to create a definitive Majora's Mask experience that enhances and modernizes the game without significantly eroding vanilla gameplay.
+This modpack provides the most convenient way to install ~40 carefully chosen mods that enhance Majora's Mask without ruining the original experience.
 
-Suggestions are greatly appreciated: quackyoutube@gmail.com
+Discuss or suggest changes here: https://discord.gg/kUFaUjayPS
+
+### Prerequisite
+[Python](https://www.python.org/downloads/) installed on your computer
 
 ### Instructions
-1. Click Manual Download
-2. Extract the .zip contents into their own folder
-3. Open a terminal window in that folder & run `python download_mods.py`
-4. Wait - this will take a while
-5. Open the "mods" folder, select all .zip files, and drag them into an open Majora's Mask Recompilation window
-6. Wait a few seconds for them to install, and then play the game!
-   
+1. Download the zip file
+2. Extract the contents into their own folder
+3. Open a terminal window in that folder and run one of the following:
+   * **For the full experience:** `python download_mods.py`
+   * **To skip the MMN64HD download, if you already have it:** `python download_mods_exclude_textures.py`
+4. Wait for the script to finish
+5. Open the `mods` folder, select all files (Ctrl+A), and drag them into the start menu of Zelda64Recompiled
+6. Wait for them to install, and then play the game!
