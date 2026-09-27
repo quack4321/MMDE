@@ -14,14 +14,6 @@ FILES_TO_ZIP = [
     'download_mods.py'
 ]
 
-def bump_patch_version(version_str):
-    """Increments the patch version digit (e.g. '1.1.1' -> '1.1.2')."""
-    parts = version_str.split('.')
-    if len(parts) == 3 and parts[2].isdigit():
-        parts[2] = str(int(parts[2]) + 1)
-        return '.'.join(parts)
-    return version_str
-
 def get_latest_version(namespace, name):
     api_url = f"https://thunderstore.io/api/experimental/package/{namespace}/{name}/"
     try:
@@ -80,13 +72,9 @@ def update_manifest():
         time.sleep(0.3)
 
     if changes_made > 0:
-        current_version = manifest.get('version_number', '1.0.0')
-        new_version = bump_patch_version(current_version)
-        manifest['version_number'] = new_version
         manifest['dependencies'] = updated_dependencies
 
         print(f"\nFound {changes_made} mod update(s).")
-        print(f"Auto-bumped version: v{current_version} -> v{new_version}")
         print(f"Writing changes to {MANIFEST_FILE}...")
         
         with open(MANIFEST_FILE, 'w') as f:
