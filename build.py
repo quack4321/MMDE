@@ -1,9 +1,9 @@
 import json
 import os
-import time
 import urllib.error
 import urllib.request
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 
 MANIFEST_FILE = 'manifest.json'
 ZIP_FILENAME = 'MMDE.zip'
@@ -22,8 +22,25 @@ def get_latest_version(namespace, name):
             data = json.loads(response.read().decode('utf-8'))
             return data.get('latest', {}).get('version_number')
     except Exception as e:
-        print(f"  -> API error fetching latest version for {name}: {e}")
         return None
+
+def check_dependency(dep):
+    parts = dep.split('-')
+    if len(parts) != 3:
+        return dep, False, f"Skipping malformed entry: {dep}"
+
+    namespace, name, current_version = parts
+    latest_version = get_latest_version(namespace, name)
+
+    if latest_version and latest_version != current_version:
+        log = f"  -> [{name}] Update found: v{current_version} -> v{latest_version}"
+        return f"{namespace}-{name}-{latest_version}", True, log
+    elif not latest_version:
+        log = f"  -> [{name}] Could not verify latest version, keeping v{current_version}"
+        return dep, False, log
+    else:
+        log = f"  -> [{name}] Up to date (v{current_version})"
+        return dep, False, log
 
 def update_manifest():
     if not os.path.exists(MANIFEST_FILE):
@@ -42,38 +59,20 @@ def update_manifest():
         print("No dependencies found.")
         return False
 
-    print(f"Checking {len(dependencies)} dependencies for updates...\n")
-    
-    updated_dependencies = []
-    changes_made = 0
+    print(f"Checking {len(dependencies)} dependencies concurrently...\n")
 
-    for dep in dependencies:
-        parts = dep.split('-')
-        if len(parts) != 3:
-            updated_dependencies.append(dep)
-            continue
+    # max_workers=8 runs 8 requests in parallel while staying well under API rate limits
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        results = list(executor.map(check_dependency, dependencies))
 
-        namespace, name, current_version = parts
-        print(f"Checking {name} (Current: v{current_version})...")
-        
-        latest_version = get_latest_version(namespace, name)
-        
-        if latest_version and latest_version != current_version:
-            print(f"  -> Update found! Changing to v{latest_version}")
-            updated_dependencies.append(f"{namespace}-{name}-{latest_version}")
-            changes_made += 1
-        else:
-            if not latest_version:
-                print(f"  -> Could not verify latest version, keeping v{current_version}")
-            else:
-                print("  -> Already up to date.")
-            updated_dependencies.append(dep)
-            
-        time.sleep(0.3)
+    updated_dependencies = [res[0] for res in results]
+    changes_made = sum(1 for res in results if res[1])
+
+    for _, _, log in results:
+        print(log)
 
     if changes_made > 0:
         manifest['dependencies'] = updated_dependencies
-
         print(f"\nFound {changes_made} mod update(s).")
         print(f"Writing changes to {MANIFEST_FILE}...")
         
