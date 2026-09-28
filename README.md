@@ -21,8 +21,5 @@ As Zelda64: Recompiled does not support mod managers, this is not a traditional 
 5. Open the newly created `mods` subfolder, select all files (Ctrl+A / Command+A), and drag them into the main menu of Zelda64Recompiled
 6. Wait for them to finish installing, and then enjoy the game!
 
-### Configuration
-Many included mods can be configured. Leaving most with their default configurations is recommended. The one change I make is Roll Master > Quiet Link > DISABLED. It's up to you, but I prefer keeping Link's shouting during rolls.
-
 ### MMN64HD Link
 To enable Nerrel's MMN64HD Link model, you have to open the Player Model Manager menu (default L + A), cycle right to "Human", choose "Improved Link", and hit apply.

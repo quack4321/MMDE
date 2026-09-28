@@ -1,55 +1,99 @@
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import os
+import shutil
 import ssl
+import threading
 import time
 import urllib.error
 import urllib.request
 
-# Prevent SSL certificate verification crashes on outdated user machines
+# Prevent SSL certificate verification crashes on outdated environments
 ssl._create_default_https_context = ssl._create_unverified_context
 
 MANIFEST_FILE = 'manifest.json'
 MODS_DIR = 'mods'
 EXCLUDED_MOD = 'Nerrel-MMN64HD'
 MAX_RETRIES = 3
-RETRY_DELAY = 2  # Base delay in seconds between retries
+RETRY_DELAY = 2
+MAX_WORKERS = 6  # Parallel download threads
+
+# Lock to ensure API checks don't burst Thunderstore simultaneously
+api_lock = threading.Lock()
 
 def get_latest_version(namespace, name):
     api_url = f"https://thunderstore.io/api/experimental/package/{namespace}/{name}/"
-    try:
-        req = urllib.request.Request(api_url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=15) as response:
-            data = json.loads(response.read().decode('utf-8'))
+
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            with api_lock:
+                req = urllib.request.Request(api_url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=15) as response:
+                    data = json.loads(response.read().decode('utf-8'))
+                # Small cooldown between serialized API calls to respect rate limits
+                time.sleep(0.35)
+
             return data.get('latest', {}).get('version_number')
-    except Exception as e:
-        print(f"  -> API error fetching latest version for {name}: {e}")
-        return None
+
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                wait_time = attempt * 2
+                print(f"[{name}] Rate limited (429). Retrying in {wait_time}s...")
+                time.sleep(wait_time)
+            else:
+                print(f"[{name}] API HTTP error fetching version: {e}")
+                break
+        except Exception as e:
+            print(f"[{name}] API error fetching version: {e}")
+            break
+
+    return None
 
 def download_file_with_retry(url, dest_path, mod_name):
-    """Downloads a file with automatic retry logic and cleans up partial files on failure."""
+    """Downloads a file in chunks with automatic retry logic and cleanup."""
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=60) as response, open(dest_path, 'wb') as out_file:
-                out_file.write(response.read())
+                shutil.copyfileobj(response, out_file, length=64 * 1024)
             return True
         except (urllib.error.URLError, TimeoutError, ConnectionResetError) as e:
-            print(f"  -> [Attempt {attempt}/{MAX_RETRIES}] Network error for {mod_name}: {e}")
-            
-            # Clean up partial/corrupted download
+            print(f"[{mod_name}] Attempt {attempt}/{MAX_RETRIES} failed: {e}")
             if os.path.exists(dest_path):
                 try:
                     os.remove(dest_path)
                 except OSError:
                     pass
-
             if attempt < MAX_RETRIES:
-                sleep_time = RETRY_DELAY * attempt
-                print(f"     Retrying in {sleep_time}s...")
-                time.sleep(sleep_time)
-
+                time.sleep(RETRY_DELAY * attempt)
     return False
+
+def process_mod(dep):
+    parts = dep.split('-')
+    if len(parts) != 3:
+        return None, True
+
+    namespace, name, original_version = parts
+    latest_version = get_latest_version(namespace, name)
+    version = latest_version if latest_version else original_version
+
+    zip_filename = f"{namespace}-{name}-{version}.zip"
+    zip_filepath = os.path.join(MODS_DIR, zip_filename)
+
+    if os.path.exists(zip_filepath):
+        print(f"[{name}] Already downloaded. Skipping.")
+        return name, True
+
+    url = f"https://thunderstore.io/package/download/{namespace}/{name}/{version}/"
+    print(f"[{name}] Downloading v{version}...")
+
+    success = download_file_with_retry(url, zip_filepath, name)
+    if success:
+        print(f"[{name}] Done.")
+    else:
+        print(f"[{name}] FAILED.")
+    return name, success
 
 def install_dependencies(exclude_textures=False):
     try:
@@ -69,45 +113,18 @@ def install_dependencies(exclude_textures=False):
         print(f"Excluding texture pack ({EXCLUDED_MOD}).\n")
 
     os.makedirs(MODS_DIR, exist_ok=True)
-    total = len(dependencies)
-    print(f"Found {total} dependencies. Fetching latest versions...\n")
+    print(f"Processing {len(dependencies)} mods using {MAX_WORKERS} workers...\n")
 
     failed_downloads = []
-
-    for idx, dep in enumerate(dependencies, start=1):
-        parts = dep.split('-')
-        if len(parts) != 3:
-            continue
-
-        namespace, name, original_version = parts
-        print(f"[{idx}/{total}] Checking {name}...")
-
-        latest_version = get_latest_version(namespace, name)
-        version_to_use = latest_version if latest_version else original_version
-
-        if latest_version and latest_version != original_version:
-            print(f"  -> Found newer version: v{latest_version} (Manifest was v{original_version})")
-
-        zip_filename = f"{namespace}-{name}-{version_to_use}.zip"
-        zip_filepath = os.path.join(MODS_DIR, zip_filename)
-
-        if os.path.exists(zip_filepath):
-            print("  -> Already downloaded. Skipping.")
-            time.sleep(0.2)
-            continue
-
-        url = f"https://thunderstore.io/package/download/{namespace}/{name}/{version_to_use}/"
-        print(f"  -> Downloading v{version_to_use}...")
-
-        success = download_file_with_retry(url, zip_filepath, name)
-        if not success:
-            print(f"  -> [FAILED] Could not download {name} after {MAX_RETRIES} attempts.")
-            failed_downloads.append(name)
-
-        time.sleep(0.3)
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = [executor.submit(process_mod, dep) for dep in dependencies]
+        for future in as_completed(futures):
+            mod_name, success = future.result()
+            if not success and mod_name:
+                failed_downloads.append(mod_name)
 
     if failed_downloads:
-        print(f"\nDownload finished with errors. The following mods failed: {', '.join(failed_downloads)}")
+        print(f"\nDownload finished with errors. Failed mods: {', '.join(failed_downloads)}")
     else:
         print("\nDownload complete! All mod zip files are ready in the 'mods' folder.")
 

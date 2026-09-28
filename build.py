@@ -1,5 +1,7 @@
 import json
 import os
+import threading
+import time
 import urllib.error
 import urllib.request
 import zipfile
@@ -14,15 +16,33 @@ FILES_TO_ZIP = [
     'download_mods.py'
 ]
 
+api_lock = threading.Lock()
+
 def get_latest_version(namespace, name):
     api_url = f"https://thunderstore.io/api/experimental/package/{namespace}/{name}/"
-    try:
-        req = urllib.request.Request(api_url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=15) as response:
-            data = json.loads(response.read().decode('utf-8'))
+    max_retries = 3
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            with api_lock:
+                req = urllib.request.Request(api_url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=15) as response:
+                    data = json.loads(response.read().decode('utf-8'))
+                time.sleep(0.35)
+
             return data.get('latest', {}).get('version_number')
-    except Exception as e:
-        return None
+
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                wait_time = attempt * 2
+                print(f"[{name}] Rate limited (429). Retrying in {wait_time}s...")
+                time.sleep(wait_time)
+            else:
+                break
+        except Exception:
+            break
+
+    return None
 
 def check_dependency(dep):
     parts = dep.split('-')
@@ -59,10 +79,9 @@ def update_manifest():
         print("No dependencies found.")
         return False
 
-    print(f"Checking {len(dependencies)} dependencies concurrently...\n")
+    print(f"Checking {len(dependencies)} dependencies...\n")
 
-    # max_workers=8 runs 8 requests in parallel while staying well under API rate limits
-    with ThreadPoolExecutor(max_workers=8) as executor:
+    with ThreadPoolExecutor(max_workers=4) as executor:
         results = list(executor.map(check_dependency, dependencies))
 
     updated_dependencies = [res[0] for res in results]
